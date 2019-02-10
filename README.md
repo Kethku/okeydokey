@@ -51,5 +51,5 @@ their console up with unnecessary details.
 
 Okeydokey is a part of my push to make tangible and documented progress on a project every day.
 
-[Day2](02credits.com/blog/day2-okeydokey)
-[Day3](02credits.com/blog/day3-okeydokey-cont)
+[Day2](http://02credits.com/blog/day2-okeydokey)
+[Day3](http://02credits.com/blog/day3-okeydokey-cont)
