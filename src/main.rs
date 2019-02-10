@@ -3,13 +3,12 @@ extern crate clap;
 use clap::App;
 
 use std::fs::File;
-use std::collections::HashMap;
 use std::env;
 use std::path::{PathBuf};
 use std::io::{BufReader, BufRead};
 
 struct Profile {
-    commands: HashMap<String, String>,
+    commands: Vec<(String, String)>,
     path: PathBuf
 }
 
@@ -44,11 +43,11 @@ fn find_profile(current_path: PathBuf) -> Option<Profile> {
 fn read_profile(profile_path: PathBuf) -> Option<Profile> {
     match File::open(profile_path.clone()) {
         Ok(ref mut file) => {
-            let mut commands = HashMap::new();
+            let mut commands = Vec::new();
 
             for line in BufReader::new(file).lines() {
-                let (name, command) = split_on_colon(line.unwrap())?;
-                commands.insert(name, command);
+                let command_parts = split_on_colon(line.unwrap())?;
+                commands.push(command_parts);
             }
 
             Some(Profile { commands, path: profile_path })
@@ -64,9 +63,11 @@ fn split_on_colon(line: String) -> Option<(String, String)> {
     Some((name.to_string(), command.to_string()))
 }
 
+
 fn list(profile: Profile) {
     let list = profile.commands
-        .keys()
+        .iter()
+        .map(|(name, _)| name)
         .fold(String::new(), |acc, next| {
             acc + " " + next
         });
@@ -74,10 +75,9 @@ fn list(profile: Profile) {
 }
 
 fn query(profile: Profile, command: &str, prefix: Option<&str>, sufix: Option<&str>) {
-    let best_option = profile
-        .commands
-        .keys()
-        .filter_map(|possible_command| shared_prefix(possible_command, command))
+    let best_option = profile.commands
+        .iter()
+        .filter_map(|(possible_command, _)| shared_prefix(possible_command, command))
         .max_by_key(|&(shared_chars, _)| shared_chars);
 
     match best_option {
@@ -96,7 +96,10 @@ fn shared_prefix(possible_command: &str, command: &str) -> Option<(usize, String
 fn print_decorated_command(profile: Profile, command_name: String, prefix: Option<&str>, sufix: Option<&str>) {
     let prefix = fill_in_profile_directory(&profile, prefix);
     let sufix = fill_in_profile_directory(&profile, sufix);
-    let command = profile.commands.get(&command_name).unwrap();
+    let (_, command) = profile.commands
+        .into_iter()
+        .find(|(name, _)| *name == command_name)
+        .unwrap();
 
     println!("{}", vec![prefix, command.to_string(), sufix].concat())
 }
