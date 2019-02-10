@@ -1,0 +1,17 @@
+name: Okeydokey
+version: "0.1"
+author: Keith Simmons
+about: .ok file manager
+args:
+  - COMMAND:
+      help: The command in the profile to run
+  - prefix:
+      short: p
+      long: prefix
+      value_name: PREFIX
+      help: Prepends argument to the returned command replacing {} with the full path to the found .ok file.
+  - sufix:
+      short: s
+      long: sufix
+      value_name: SUFIX
+      help: Appends argument to the returned command replacing {} with the full path to the found .ok file.

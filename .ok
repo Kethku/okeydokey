@@ -1,0 +1,2 @@
+build: cargo build
+use: cargo build --release; rm c:/dev/tools/okeydokey.exe; cp ./target/release/okeydokey.exe c:/dev/tools/okeydokey.exe
