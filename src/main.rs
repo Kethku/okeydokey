@@ -25,7 +25,7 @@ fn main() {
                 profile,
                 command,
                 matches.value_of("prefix"),
-                matches.value_of("sufix")),
+                matches.value_of("suffix")),
             None => list(profile)
         }
     }
@@ -74,14 +74,14 @@ fn list(profile: Profile) {
     println!("{}", list.trim());
 }
 
-fn query(profile: Profile, command: &str, prefix: Option<&str>, sufix: Option<&str>) {
+fn query(profile: Profile, command: &str, prefix: Option<&str>, suffix: Option<&str>) {
     let best_option = profile.commands
         .iter()
         .filter_map(|(possible_command, _)| shared_prefix(possible_command, command))
         .max_by_key(|&(shared_chars, _)| shared_chars);
 
     match best_option {
-        Some((_, actual_command)) => print_decorated_command(profile, actual_command, prefix, sufix),
+        Some((_, actual_command)) => print_decorated_command(profile, actual_command, prefix, suffix),
         None => ()
     }
 }
@@ -93,15 +93,15 @@ fn shared_prefix(possible_command: &str, command: &str) -> Option<(usize, String
     }
 }
 
-fn print_decorated_command(profile: Profile, command_name: String, prefix: Option<&str>, sufix: Option<&str>) {
+fn print_decorated_command(profile: Profile, command_name: String, prefix: Option<&str>, suffix: Option<&str>) {
     let prefix = fill_in_profile_directory(&profile, prefix);
-    let sufix = fill_in_profile_directory(&profile, sufix);
+    let suffix = fill_in_profile_directory(&profile, suffix);
     let (_, command) = profile.commands
         .into_iter()
         .find(|(name, _)| *name == command_name)
         .unwrap();
 
-    println!("{}", vec![prefix, command.to_string(), sufix].concat())
+    println!("{}", vec![prefix, command.to_string(), suffix].concat())
 }
 
 fn fill_in_profile_directory(profile: &Profile, pattern: Option<&str>) -> String {

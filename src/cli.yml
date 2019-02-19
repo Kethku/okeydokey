@@ -10,8 +10,8 @@ args:
       long: prefix
       value_name: PREFIX
       help: Prepends argument to the returned command replacing {} with the full path to the found .ok file.
-  - sufix:
+  - suffix:
       short: s
-      long: sufix
-      value_name: SUFIX
+      long: suffix
+      value_name: SUFFIX
       help: Appends argument to the returned command replacing {} with the full path to the found .ok file.
