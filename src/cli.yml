@@ -21,4 +21,3 @@ args:
       value_name: ARGUMENTS
       multiple: true
       help: Fills {n} in the matched command with the nth arguments in this list. If less than n arguments provided, empty string is substituted instead. If more than the total holes in the command are provided, then the arguments are appended to the command separated by spaces.
-
