@@ -16,29 +16,49 @@ fn main() {
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    let profile_opt = find_profile(env::current_dir().unwrap());
-    if profile_opt.is_some() {
-        let profile = profile_opt.unwrap();
+    let profiles = find_profiles(env::current_dir().unwrap());
 
-        match matches.value_of("COMMAND") {
-            Some(command) => query(
-                profile,
-                command,
-                matches.value_of("prefix"),
-                matches.value_of("suffix"),
-                matches.values_of("args").map_or(Vec::new(), |args| args.collect())),
-            None => list(profile)
+    match matches.value_of("COMMAND") {
+        Some(command_prefix) => {
+            let prefix = matches.value_of("prefix");
+            let suffix = matches.value_of("suffix");
+            let args = matches.values_of("args").map_or(Vec::new(), |args| args.collect());
+            run(profiles, command_prefix, prefix, suffix, args);
         }
-    }
+        None => list(profiles)
+    };
 }
 
-fn find_profile(current_path: PathBuf) -> Option<Profile> {
-    let possible_profile = current_path.join(".ok");
-    if possible_profile.exists() {
-        Some(read_profile(possible_profile)?)
-    } else {
-        Some(find_profile(current_path.parent()?.to_path_buf())?)
+fn run(profiles: Vec<Profile>, command_prefix: &str, prefix: Option<&str>, suffix: Option<&str>, args: Vec<&str>) -> Option<()> {
+    let (command, profile_path) = query(profiles, command_prefix)?;
+    print_decorated_command(
+        command, 
+        profile_path.clone(), 
+        prefix,
+        suffix,
+        args);
+    Some(())
+}
+
+fn find_profiles(initial_path: PathBuf) -> Vec<Profile> {
+    let mut profile_paths = Vec::new();
+
+    let mut current_path = initial_path;
+    loop {
+        let possible_profile = current_path.join(".ok");
+        if possible_profile.exists() {
+            profile_paths.push(possible_profile);
+        }
+
+        let parent_path = current_path.parent();
+        if parent_path.is_some() {
+            current_path = parent_path.unwrap().to_path_buf();
+        } else {
+            break;
+        }
     }
+
+    return profile_paths.into_iter().map(|path| read_profile(path)).filter_map(|x| x).collect();
 }
 
 fn read_profile(profile_path: PathBuf) -> Option<Profile> {
@@ -65,9 +85,9 @@ fn split_on_colon(line: String) -> Option<(String, String)> {
 }
 
 
-fn list(profile: Profile) {
-    let list = profile.commands
-        .iter()
+fn list(profiles: Vec<Profile>) {
+    let list = profiles.iter()
+        .flat_map(|profile| profile.commands.iter())
         .map(|(name, _)| name)
         .fold(String::new(), |acc, next| {
             acc + " " + next
@@ -75,16 +95,15 @@ fn list(profile: Profile) {
     println!("{}", list.trim());
 }
 
-fn query(profile: Profile, command: &str, prefix: Option<&str>, suffix: Option<&str>, args: Vec<&str>) {
-    let best_option = profile.commands
-        .iter()
-        .filter_map(|(possible_command, _)| shared_prefix(possible_command, command))
-        .max_by_key(|&(shared_chars, _)| shared_chars);
-
-    match best_option {
-        Some((_, actual_command)) => print_decorated_command(profile, actual_command, prefix, suffix, args),
-        None => ()
-    }
+fn query(profiles: Vec<Profile>, command_prefix: &str) -> Option<(String, PathBuf)> {
+    profiles.into_iter()
+        .flat_map(|profile| {
+            let path = profile.path.clone();
+            profile.commands.into_iter().map(move |command| (command.clone(), path.clone()))
+        })
+        .filter_map(|((possible_command_name, command), profile_path)| shared_prefix(&possible_command_name, command_prefix).map(|result| (result, command, profile_path)))
+        .max_by_key(|&((shared_chars, _), _, _)| shared_chars)
+        .map(|(_, command, path)| (command, path))
 }
 
 fn shared_prefix(possible_command: &str, command: &str) -> Option<(usize, String)> {
@@ -94,19 +113,14 @@ fn shared_prefix(possible_command: &str, command: &str) -> Option<(usize, String
     }
 }
 
-fn print_decorated_command(profile: Profile, command_name: String, prefix: Option<&str>, suffix: Option<&str>, args: Vec<&str>) {
-    let prefix = fill_in_profile_directory(&profile, prefix);
-    let suffix = fill_in_profile_directory(&profile, suffix);
-    let (_, command) = profile.commands
-        .into_iter()
-        .find(|(name, _)| *name == command_name)
-        .unwrap();
-
+fn print_decorated_command(command: String, profile_path: PathBuf, prefix: Option<&str>, suffix: Option<&str>, args: Vec<&str>) {
+    let prefix = fill_in_profile_directory(&profile_path, prefix);
+    let suffix = fill_in_profile_directory(&profile_path, suffix);
     println!("{}", vec![prefix, fill_in_arguments(command.to_string(), args), suffix].concat())
 }
 
-fn fill_in_profile_directory(profile: &Profile, pattern: Option<&str>) -> String {
-    let profile_directory = profile.path.parent().unwrap().to_str().unwrap();
+fn fill_in_profile_directory(profile_path: &PathBuf, pattern: Option<&str>) -> String {
+    let profile_directory = profile_path.parent().unwrap().to_str().unwrap();
     pattern.unwrap_or_default().replace("{}", profile_directory)
 }
 
