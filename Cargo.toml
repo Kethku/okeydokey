@@ -1,9 +1,9 @@
 [package]
 name = "okeydokey"
 version = "0.1.0"
-authors = ["keith <keith@the-simmons.net>"]
-edition = "2018"
+authors = ["kaylee <kaylee@the-simmons.net>"]
+edition = "2021"
 
 [dependencies]
-clap = {version = "3.2.16", features = ["derive"]}
+clap = {version = "4.4.7", features = ["derive"]}
 indoc = "1.0"

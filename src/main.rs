@@ -1,32 +1,57 @@
-use std::fs::File;
 use std::env;
-use std::path::{PathBuf};
-use std::io::{BufReader, BufRead};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 
-use clap::{Subcommand, Parser};
+use clap::Parser;
 use indoc::indoc;
-
 
 struct Profile {
     commands: Vec<(String, String)>,
-    path: PathBuf
+    internal_commands: Vec<(String, String)>,
+    path: PathBuf,
 }
 
+impl Profile {
+    fn all_commands(&self) -> Vec<(String, String)> {
+        let mut commands = self.commands.clone();
+        commands.extend(self.internal_commands.clone());
+        commands
+    }
+}
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Cli {
-    #[clap(value_parser, help = "The command in the profile to run")]
+    #[clap(help = "The command in the profile to run")]
     command: Option<String>,
-    #[clap(short, long, value_parser, help = "Prepends argument to the returned command replacing {} with the full path to the found .ok file.")]
+    #[clap(
+        short,
+        long,
+        help = "Prepends argument to the returned command replacing {} with the full path to the found .ok file."
+    )]
     prefix: Option<String>,
-    #[clap(short, long, value_parser, help = "Appends argument to the returned command replacing {} with the full path to the found .ok file.")]
+    #[clap(
+        short,
+        long,
+        help = "Appends argument to the returned command replacing {} with the full path to the found .ok file."
+    )]
     suffix: Option<String>,
-    #[clap(short, long, value_parser, help = "Fills {n} in the matched command with the nth arguments in this list. If less than n arguments provided, empty string is substituted instead. If more than the total holes in the command are provided, then the arguments are appended to the command separated by spaces.")]
+    #[clap(
+        short,
+        long,
+        num_args = 0..,
+        allow_hyphen_values = true,
+        help = "Fills {n} in the matched command with the nth arguments in this list. If less than n arguments provided, empty string is substituted instead. If more than the total holes in the command are provided, then the arguments are appended to the command separated by spaces."
+    )]
     args: Vec<String>,
 
-    #[clap(short, long, value_parser, help = "Whether to instead of running a command, print out the hook for the given platform shell.")]
-    hook: Option<String>
+    #[clap(
+        short,
+        long,
+        help = "Whether to instead of running a command, print out the hook for the given platform shell."
+    )]
+    hook: Option<String>,
 }
 
 fn main() {
@@ -52,7 +77,7 @@ fn main() {
                     }
                 }
             "#}),
-            _ => None
+            _ => None,
         };
 
         if let Some(hook) = hook {
@@ -68,26 +93,10 @@ fn main() {
         let profile = profile_opt.unwrap();
 
         if let Some(command) = cli.command {
-            query(
-                profile,
-                command,
-                cli.prefix,
-                cli.suffix,
-                cli.args,
-            )
+            query(profile, command, cli.prefix, cli.suffix, cli.args);
         } else {
-            list(profile)
+            list(profile);
         }
-
-        // match matches.value_of("COMMAND") {
-        //     Some(command) => query(
-        //         profile,
-        //         command,
-        //         matches.value_of("prefix"),
-        //         matches.value_of("suffix"),
-        //         matches.values_of("args").map_or(Vec::new(), |args| args.collect())),
-        //     None => list(profile)
-        // }
     }
 }
 
@@ -104,15 +113,24 @@ fn read_profile(profile_path: PathBuf) -> Option<Profile> {
     match File::open(profile_path.clone()) {
         Ok(ref mut file) => {
             let mut commands = Vec::new();
+            let mut internal_commands = Vec::new();
 
             for line in BufReader::new(file).lines() {
-                let command_parts = split_on_colon(line.unwrap())?;
-                commands.push(command_parts);
+                let (name, command) = split_on_colon(line.unwrap())?;
+                if name.starts_with("_") {
+                    internal_commands.push((name, command));
+                } else {
+                    commands.push((name, command));
+                }
             }
 
-            Some(Profile { commands, path: profile_path })
-        },
-        Err(_) => None
+            Some(Profile {
+                internal_commands,
+                commands,
+                path: profile_path,
+            })
+        }
+        Err(_) => None,
     }
 }
 
@@ -123,45 +141,70 @@ fn split_on_colon(line: String) -> Option<(String, String)> {
     Some((name.to_string(), command.to_string()))
 }
 
-
 fn list(profile: Profile) {
-    let list = profile.commands
+    let list = profile
+        .commands
         .iter()
         .map(|(name, _)| name)
-        .fold(String::new(), |acc, next| {
-            acc + " " + next
-        });
+        .fold(String::new(), |acc, next| acc + " " + next);
     println!("{}", list.trim());
 }
 
-fn query(profile: Profile, command: String, prefix: Option<String>, suffix: Option<String>, args: Vec<String>) {
-    let best_option = profile.commands
+fn query(
+    profile: Profile,
+    command: String,
+    prefix: Option<String>,
+    suffix: Option<String>,
+    args: Vec<String>,
+) -> Option<()> {
+    let commands_with_valid_prefix_count = profile
+        .all_commands()
         .iter()
         .filter_map(|(possible_command, _)| shared_prefix(possible_command, &command))
-        .max_by_key(|&(shared_chars, _)| shared_chars);
+        .collect::<Vec<_>>();
 
-    match best_option {
-        Some((_, actual_command)) => print_decorated_command(profile, actual_command, prefix, suffix, args),
-        None => ()
-    }
+    let most_shared_chars = commands_with_valid_prefix_count
+        .iter()
+        .cloned()
+        .map(|(shared_chars, _)| shared_chars)
+        .max()?;
+
+    let best_command = commands_with_valid_prefix_count
+        .into_iter()
+        .filter(|(shared_chars, _)| *shared_chars == most_shared_chars)
+        .map(|(_, command)| command)
+        .min_by_key(|command| command.len())?;
+
+    print_decorated_command(profile, best_command, prefix, suffix, args);
+    Some(())
 }
 
 fn shared_prefix(possible_command: &str, command: &str) -> Option<(usize, String)> {
     match possible_command.starts_with(command) {
         true => Some((command.len(), possible_command.to_string())),
-        false => None
+        false => None,
     }
 }
 
-fn print_decorated_command(profile: Profile, command_name: String, prefix: Option<String>, suffix: Option<String>, args: Vec<String>) {
+fn print_decorated_command(
+    profile: Profile,
+    command_name: String,
+    prefix: Option<String>,
+    suffix: Option<String>,
+    args: Vec<String>,
+) {
     let prefix = fill_in_profile_directory(&profile, prefix);
     let suffix = fill_in_profile_directory(&profile, suffix);
-    let (_, command) = profile.commands
+    let (_, command) = profile
+        .all_commands()
         .into_iter()
         .find(|(name, _)| *name == command_name)
         .unwrap();
 
-    println!("{}", vec![prefix, fill_in_arguments(command.to_string(), args), suffix].concat())
+    println!(
+        "{}",
+        vec![prefix, fill_in_arguments(command.to_string(), args), suffix].concat()
+    )
 }
 
 fn fill_in_profile_directory(profile: &Profile, pattern: Option<String>) -> String {
@@ -177,7 +220,7 @@ fn count_holes(command: &String) -> usize {
     fn rec(command: &String, n: usize) -> usize {
         match command.contains(&hole(n)[..]) {
             true => rec(command, n + 1),
-            false => n
+            false => n,
         }
     }
 
@@ -193,7 +236,7 @@ fn fill_in_arguments(perferated_command: String, args: Vec<String>) -> String {
         let hole_string = hole(hole_number);
         command = match args_iterator.next() {
             Some(arg) => command.replace(&hole_string[..], arg),
-            None => command.replace(&hole_string[..], "")
+            None => command.replace(&hole_string[..], ""),
         };
     }
 
