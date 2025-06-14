@@ -40,6 +40,12 @@ struct Cli {
     #[clap(
         short,
         long,
+        help = "Fallback command to run if no matching command is found. Replaces {} with the error message."
+    )]
+    fallback: Option<String>,
+    #[clap(
+        short,
+        long,
         num_args = 0..,
         allow_hyphen_values = true,
         help = "Fills {n} in the matched command with the nth arguments in this list. If less than n arguments provided, empty string is substituted instead. If more than the total holes in the command are provided, then the arguments are appended to the command separated by spaces."
@@ -66,9 +72,9 @@ fn main() {
                         okeydokey | Write-Host -ForegroundColor 'Blue'
                     } else {
                         if ($args.Count -gt 1) {
-                            $script = okeydokey $args[0] -p "pushd {};" -s "; popd" -a ($args | select -skip 1)
+                            $script = okeydokey $args[0] -p "pushd {};" -s "; popd" -a ($args | select -skip 1) -f "'{}' | Write-Host -ForegroundColor 'Red'"
                         } else {
-                            $script = okeydokey $args[0] -p "pushd {};" -s "; popd"
+                            $script = okeydokey $args[0] -p "pushd {};" -s "; popd" -f "'{}' | Write-Host -ForegroundColor 'Red'"
                         }
 
                         if ($script -ne $null) {
@@ -93,10 +99,18 @@ fn main() {
         let profile = profile_opt.unwrap();
 
         if let Some(command) = cli.command {
-            query(profile, command, cli.prefix, cli.suffix, cli.args);
+            if query(profile, command, cli.prefix, cli.suffix, cli.args).is_none() {
+                if let Some(fallback) = cli.fallback {
+                    let fallback_command = fallback.replace("{}", "No matching command.");
+                    println!("{fallback_command}");
+                }
+            }
         } else {
             list(profile);
         }
+    } else if let Some(fallback) = cli.fallback {
+        let fallback_command = fallback.replace("{}", "Could not find profile `.ok` file.");
+        println!("{fallback_command}");
     }
 }
 
